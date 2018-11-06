@@ -1,0 +1,151 @@
+﻿<!DOCTYPE html>
+<html>
+    <head>
+        <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+		    <base href ='/'>
+        <meta charset="UTF-8" />
+        <title>Sayso</title>
+        <link href="botchat.css" rel="stylesheet" />
+        <style>
+            .wc-chatview-panel {
+                width: 100%;
+				height: 100%;
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>
+        <div  id="iSurveyBotChat"/>
+        <div style="clear:both;"/>
+        <script type="text/javascript" src="botchat.js"></script>
+        
+        <script>
+           //Domain where bot connector is hosted
+          var connectorLocation = "Your Domain name where connector/botservice is present";
+          //get Query parameter from URL
+          var parameters = location.search.substring(1).split("&");
+          console.log(`Location.Search: ${location.search}`);
+          if(location.search === ''){
+              document.write(`  
+                            <div>
+                                <h1>404 Userid/Username Not Found</h1>
+                                <p>In order to run the bot, you need to provide both <strong>userid</strong> and <strong>username</strong> 
+                                    as query parameter.</p>
+                            </div>`
+                            );
+          }else if(parameters.length < 2){
+            document.write(`  
+                            <div>
+                                <h1>404 Not Found : Insufficient Parameters</h1>
+                                <p>In order to run the bot, you need to provide both <strong>userid</strong> and <strong>username</strong> 
+                                    as query parameter.</p>
+                            </div>`
+                            );
+          }
+          else{
+                var temp = parameters[0].split("=");
+                userId = unescape(temp[1]);
+                temp = parameters[1].split("=");
+                userName = unescape(temp[1]);
+
+                //Setup user object with useid(GUID) and username
+                    var user = {
+                        id: userId,
+                        name: userName
+                    };
+                //Bot connection
+                var botConnection = new BotChat.DirectLine({
+                    domain: connectorLocation,
+                    webSocket : false,
+                    user : user,
+                });
+                // Botchat.App
+                BotChat.App({
+                    user: user,
+                    botConnection: botConnection,
+                    bot: { id: 'iSurveyBot', name: 'sayso' },
+                    resize: 'detect',
+                }, document.getElementById("iSurveyBotChat"));
+				
+			  // Accept Event for survey progress
+			  botConnection.activity$
+                    .filter(function(activity){
+                        return (activity.type === "event" && activity.name === "surveyprogress");
+                    })
+                    .subscribe(function(activity){
+                        return changeProgress(activity.value)
+                    })
+            // Accept Event for Survey Ending and add a line break
+              botConnection.activity$
+                    .filter(function(activity){
+                        return (activity.type === "event" && activity.name === "surveyend");
+                    })
+                    .subscribe(function(activity){
+                        return addLineBreak(activity.value);
+                    })
+            // Accepr Event to get Current Running Survey
+            botConnection.activity$
+                    .filter(function(activity){
+                        return (activity.type === "event" && activity.name === "currentSurvey");
+                    })
+                    .subscribe(function(activity){
+                        return displayCurrentSurveyNameAtTop(activity.value);
+            })
+		      // == post an event to backend ===
+                botConnection
+                .postActivity({
+                    from: user,
+                    name: 'root',
+                    type: 'event',
+                    value: ''
+                })
+                .subscribe(function (id) {
+                    console.log('trigger root event sent');
+                });   
+            }          
+	
+		 //Method to add a line break
+         function addLineBreak(value){
+            var botMessages = document.getElementsByClassName("wc-message-wrapper");
+            var lastMessageFromBot = botMessages[botMessages.length - 1];
+            var lineBreak = document.createElement("hr");
+            lineBreak.setAttribute('class', 'hr-text');
+            lineBreak.setAttribute('data-content', value);
+            // setTimeout(()=>lastMessageFromBot.parentNode.insertBefore(lineBreak, lastMessageFromBot.nextSibling), 4000);
+            setInterval(()=>{
+                if(lastMessageFromBot.nextSibling){
+                    lastMessageFromBot.parentNode.insertBefore(lineBreak, lastMessageFromBot.nextSibling);
+                    clearInterval();
+                }
+            }, 500)
+        }
+		
+        //change the progress bar width and show % of completion	
+			function changeProgress(progressValue){
+            var progressBar = document.getElementsByClassName("wc-header")[0];
+            progressBar.style.display = 'flex';
+            progressBar.style.width = progressValue+'%';
+            progressBar.children[0].innerHTML = progressValue+'%';
+            progressBar.children[0].style.color = 'white';
+            progressBar.children[0].style.margin = '0px auto';
+			progressBar.children[0].style.padding = 'auto';
+            progressBar.children[0].style.fontWeight = 'bold';
+            if(progressValue == 100){
+                progressBar.children[0].innerHTML = '';
+                progressBar.style.display = 'none';
+                document.getElementById('currentsurvey').style.display = 'none';
+            }
+		}
+        // function to add a in progress element at top of Chat
+        function displayCurrentSurveyNameAtTop(surveyName){
+            const chatView = document.getElementsByClassName('wc-chatview-panel')[0];
+            const inProgress = document.createElement('hr');
+            inProgress.style.marginTop = '20px';
+            inProgress.setAttribute('id', 'currentsurvey');
+            inProgress.setAttribute('class', 'hr-text');
+            inProgress.setAttribute('data-content', 'In Progress : '+surveyName);
+            chatView.parentNode.insertBefore(inProgress, chatView.nextSibling);
+        }
+        </script>
+    </body>
+</html>
